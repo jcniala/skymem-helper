@@ -1,0 +1,117 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<title>All-in-One Skymem Helper</title>
+<style>
+  :root { --bg:#f6f7f9; --card:#fff; --txt:#111; --accent:#4caf50; }
+  body { font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif; margin:0; background:var(--bg); color:var(--txt); }
+  .wrap { max-width: 900px; margin: 32px auto; padding: 0 16px; }
+  h1 { font-size: 24px; margin: 0 0 16px; }
+  .card { background: var(--card); border-radius: 12px; padding: 16px; box-shadow: 0 4px 20px rgba(0,0,0,.06); margin: 16px 0 28px; }
+  .row { display: flex; gap: 8px; flex-wrap: wrap; }
+  textarea { width: 100%; min-height: 140px; padding: 10px; border-radius: 8px; border: 1px solid #d7dce3; font: 14px/1.4 monospace; background: #fff; }
+  pre { white-space: pre-wrap; word-break: break-word; background:#111; color:#e8e8e8; padding:12px; border-radius:10px; max-height: 320px; overflow:auto; }
+  button { background: var(--accent); color:#fff; border:0; padding:10px 14px; border-radius:10px; cursor:pointer; font-weight:600; }
+  button.secondary { background:#2f3747; }
+  .hint { font-size: 13px; opacity:.8; margin: 6px 0 0; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>All-in-One Skymem Helper</h1>
+  <p class="hint">Tool 1 builds a Webscraper.io sitemap from domains. Tool 2 extracts the first 3 unique emails per email-domain from any pasted Skymem dump. Both outputs are copy-ready.</p>
+
+  <!-- Tool 1 -->
+  <div class="card">
+    <h2>1) Domains → Skymem JSON (Webscraper.io)</h2>
+    <textarea id="domainsInput" placeholder="edenproject.com
+coxandcox.co.uk
+britishcornershop.co.uk"></textarea>
+    <div class="row">
+      <button onclick="convertToJSON()">Generate JSON</button>
+      <button class="secondary" onclick="copyText('jsonOutput')">Copy JSON</button>
+    </div>
+    <pre id="jsonOutput" aria-live="polite"></pre>
+    <p class="hint">_id is fixed to <code>skymem</code>. Each line becomes <code>https://www.skymem.info/srch?q=&lt;domain&gt;</code> inside <code>startUrl</code>.</p>
+  </div>
+
+  <!-- Tool 2 -->
+  <div class="card">
+    <h2>2) Multi-Entry Email Extractor (Top 3 per Email-Domain)</h2>
+    <textarea id="emailsInput" placeholder="Paste ANY Skymem results here… It will find all addresses like
+matthew.monckton@coxandcox.co.uk suzanne.barker-king@coxandcox.co.uk … and group them by domain (coxandcox.co.uk)."></textarea>
+    <div class="row">
+      <button onclick="extractTop3()">Extract Top 3 / Domain</button>
+      <button class="secondary" onclick="copyText('emailsOutput')">Copy Rows</button>
+    </div>
+    <pre id="emailsOutput" aria-live="polite"></pre>
+    <p class="hint">Output is tab-separated: <code>domain.com[TAB]email1[TAB]email2[TAB]email3</code>. Paste straight into Excel/Sheets.</p>
+  </div>
+</div>
+
+<script>
+/* ---------- Tool 1: Domains → Skymem JSON ---------- */
+function convertToJSON() {
+  const raw = document.getElementById('domainsInput').value;
+  const domains = raw
+    .split(/[\r\n,;\s]+/).map(s => s.trim()).filter(Boolean);
+
+  const startUrls = domains.map(d => `https://www.skymem.info/srch?q=${d}`);
+  const json = { "_id": "skymem", "startUrl": startUrls, "selectors": [] };
+
+  document.getElementById('jsonOutput').textContent = JSON.stringify(json, null, 2);
+}
+
+/* ---------- Tool 2: Emails → Group by email-domain; Top 3 unique ---------- */
+function extractTop3() {
+  const text = document.getElementById('emailsInput').value;
+
+  // 1) Normalize common weird spacing around '@' just in case
+  const normalized = text.replace(/@\s+/g, '@').replace(/\s+@/g, '@');
+
+  // 2) Find ALL full emails in order of appearance
+  const emailRegex = /[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[A-Za-z]{2,}/g;
+  const all = normalized.match(emailRegex) || [];
+
+  // 3) Preserve appearance order but de-dupe globally
+  const seenGlobal = new Set();
+  const orderedEmails = [];
+  for (const e of all) {
+    const lower = e.toLowerCase();
+    if (!seenGlobal.has(lower)) {
+      seenGlobal.add(lower);
+      orderedEmails.push(lower);
+    }
+  }
+
+  // 4) Group by domain (right side of @)
+  const byDomain = new Map(); // domain -> array of emails
+  for (const e of orderedEmails) {
+    const at = e.lastIndexOf('@');
+    if (at === -1) continue;
+    const dom = e.slice(at + 1);
+    if (!byDomain.has(dom)) byDomain.set(dom, []);
+    const arr = byDomain.get(dom);
+    if (arr.length < 3) arr.push(e); // keep only top 3 per domain
+  }
+
+  // 5) Build tab-separated rows: domain \t email1 \t email2 \t email3
+  const rows = [];
+  for (const [dom, emails] of byDomain.entries()) {
+    const padded = emails.concat(['', '', '']).slice(0, 3);
+    rows.push([dom, ...padded].join('\t'));
+  }
+
+  document.getElementById('emailsOutput').textContent = rows.join('\n');
+}
+
+/* ---------- Copy helper ---------- */
+function copyText(id) {
+  const txt = document.getElementById(id).textContent;
+  if (!txt) { alert('Nothing to copy yet!'); return; }
+  navigator.clipboard.writeText(txt).then(() => alert('Copied!'));
+}
+</script>
+</body>
+</html>
